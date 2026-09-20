@@ -2,7 +2,7 @@
 name: agent/agentic-hive
 description: Start the autonomous multi-agent dev loop — a queen + bees in tmux solving tickets from LatticeCast PM
 argument-hint: plan | running | status
-version: 0.40.1
+version: 0.40.2
 ---
 
 # agentic-hive — Autonomous Dev Loop
@@ -28,8 +28,10 @@ bee time, **the ticket is too big — split it before opening**.
 
 Practical sizing rules when filing tickets:
 
-- **One file changed.** If the implementation touches >1 file, the
-  description is mixing concerns. Split.
+- **One testable behavior, not one layer or file.** A task may touch frontend,
+  backend, storage, and tests when that is required to deliver one coherent
+  behavior end-to-end. Split only at a real, independently testable behavior
+  boundary; never split a feature into frontend-only and backend-only tickets.
 - **One topic** (for tests this is enforced by `developing/e2e`'s
   one-topic-per-file rule).
 - **<300 lines of new code.** Skim the description: if it sounds like

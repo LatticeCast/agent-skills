@@ -155,7 +155,11 @@ Epic (1 per plan)
 ```
 
 **Epic** — the single top-level goal of this plan. Set `type=epic`.  
-**Story** — a feature area, phase, or user-facing capability. Set `type=story`, `Parent=<epic_row_id>`.  
+**Story** — one complete user-facing feature / vertical slice. It owns the
+frontend interaction, backend endpoint and data contract, persistence, response,
+writable-store cache update, derived UI state, and feature verification needed to
+make that capability work end-to-end. **Never create separate frontend and
+backend stories for one feature.** Set `type=story`, `Parent=<epic_row_id>`.
 **Issue/Task** — a single implementation unit. Set `type=task` or `type=bug`, `Parent=<story_row_id>`.
 
 Rules:
@@ -194,6 +198,9 @@ dependency.
 - An issue owns one coherent behavior, not an arbitrary single file. Include
   every layer required to make that behavior correct end-to-end; split only at
   a real, testable behavioral boundary.
+- Do not split stories or issues by technical layer (`frontend`, `backend`,
+  `database`, `API`). A story is a complete feature; its child issues are
+  serial, independently testable behavior slices inside that feature.
 - Concurrent issues should **not conflict** — do not send overlapping files or
   mutually dependent behavior to separate bees. Put serial, dependent work in
   the same story worktree.
@@ -207,14 +214,10 @@ dependency.
 ### Good Hierarchy Example
 ```
 Epic: Add OAuth2 Login
-├── Story: Backend Auth Endpoints  (Parent=epic)
-│   ├── Task: Add /auth/google route in router/auth.py  (Parent=story)
-│   ├── Task: Add JWT token generation in auth service  (Parent=story)
-│   └── Task: Test: snapshot Backend Auth Endpoints      (Parent=story, tags=[test])
-└── Story: Frontend Login UI  (Parent=epic)
-    ├── Task: Add LoginButton component in src/lib/  (Parent=story)
-    ├── Task: Handle OAuth callback in +page.svelte   (Parent=story)
-    └── Task: Test: snapshot Frontend Login UI           (Parent=story, tags=[test])
+└── Story: Sign in with Google  (Parent=epic)
+    ├── Task: Add Google auth exchange and token contract  (Parent=story)
+    ├── Task: Connect login trigger, response cache, and derived signed-in UI  (Parent=story)
+    └── Task: Test: snapshot Sign in with Google  (Parent=story, tags=[test])
 ```
 
 ### Auto-create Test Ticket per Story
