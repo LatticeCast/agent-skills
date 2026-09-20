@@ -2,7 +2,7 @@
 name: agent/agentic-hive
 description: Start the autonomous multi-agent dev loop — a queen + bees in tmux solving tickets from LatticeCast PM
 argument-hint: plan | running | status
-version: 0.40.0
+version: 0.40.1
 ---
 
 # agentic-hive — Autonomous Dev Loop
@@ -259,7 +259,7 @@ no trigger files are needed.
 
 Bees don't call an LLM CLI inline — `bee.sh`'s `step()` calls
 `llm_run()` from `example-scripts/llm.sh`, which selects
-`$LLM_PROVIDER` (`claude` by default, or `codex`) and streams progress
+`$LLM_PROVIDER` (`claude` by default, or `codex` or `hermes`) and streams progress
 lines back into the step's log file. `$LLM_BACKEND` remains a backwards-
 compatible alias. Adding another CLI provider changes `llm.sh` and its
 formatter only — `queen.sh` and `bee.sh` stay unchanged.
@@ -267,7 +267,7 @@ formatter only — `queen.sh` and `bee.sh` stay unchanged.
 The abstraction is:
 
 ```text
-bee.sh step() → llm.sh llm_run() → Claude or Codex CLI
+bee.sh step() → llm.sh llm_run() → Claude, Codex, or Hermes CLI
 ```
 
 The `claude` backend calls `claude -p --output-format=stream-json
@@ -294,9 +294,21 @@ export LLM_PROVIDER=codex
 # export CODEX_MODEL=gpt-5.6-codex  # optional
 ```
 
-Both adapters pass prompts over stdin, preserve the actual provider exit
+All adapters pass prompts over stdin, preserve the actual provider exit
 code through the formatting pipeline, and support `LLM_DRY_RUN=1` for
 command-construction checks without starting a model run.
+
+The `hermes` provider calls `hermes chat --query-file - --oneshot --format
+stream-json --yolo --in "$LLM_PROJECT_DIR"` and formats its JSONL output with
+`example-scripts/format_hermes_stream.py`. `--yolo` explicitly bypasses all
+Hermes dangerous-command approval prompts, so hive bees can execute their
+ticket workflow unattended. Select it with:
+
+```bash
+export LLM_PROVIDER=hermes
+# export HERMES_MODEL=anthropic/claude-sonnet-4.6  # optional
+# export HERMES_PROVIDER=anthropic                 # optional
+```
 
 ### Watchdog: kill the provider if log goes silent
 
@@ -368,8 +380,9 @@ source "${SKILLS_DIR}/developing/project-management/pm_tool.sh"
 |--------|------|
 | queen.sh | Pure rule-based: query PM → spawn → poll → cleanup |
 | bee.sh | Bash infra + LLM code: `source pm_tool.sh` for PM ops |
-| llm.sh | Provider abstraction: validates, runs, and stops Claude or Codex |
+| llm.sh | Provider abstraction: validates, runs, and stops Claude, Codex, or Hermes |
 | format_claude_stream.py | Formats Claude stream-json as live log lines |
 | format_codex_stream.py | Formats `codex exec --json` JSONL as live log lines |
+| format_hermes_stream.py | Formats Hermes stream-json events as live log lines |
 | start.sh / stop.sh | tmux session lifecycle |
 | monitor-cron.sh | cron-safe deterministic monitor + Codex chat resume |

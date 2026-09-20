@@ -41,11 +41,12 @@ Read the example scripts in `.agent-skills/agent/agentic-hive/example-scripts/` 
 
 ### 2f. LLM adapter helpers — copy, don't rewrite
 
-Copy these three files as-is from `example-scripts/`:
+Copy these four files as-is from `example-scripts/`:
 
-- `llm.sh` — selects and runs `LLM_PROVIDER=claude|codex`
+- `llm.sh` — selects and runs `LLM_PROVIDER=claude|codex|hermes`
 - `format_claude_stream.py` — formats Claude stream-json events
 - `format_codex_stream.py` — formats Codex JSONL events
+- `format_hermes_stream.py` — formats Hermes JSONL events
 
 Provider-specific CLI details belong in `llm.sh`; `bee.sh` stays
 provider-neutral.
@@ -68,6 +69,8 @@ HIVE_VERIFY_CMD=<project check, e.g. docker compose exec -T e2e pytest . -q>
 MONITOR_CODEX_SESSION_ID=
 # CLAUDE_MODEL=sonnet
 # CODEX_MODEL=gpt-5.6-codex
+# HERMES_MODEL=anthropic/claude-sonnet-4.6
+# HERMES_PROVIDER=anthropic
 ```
 
 That's it. The helpers (`pm_*`, `lc_*`) are sourced from the skill,
@@ -112,9 +115,10 @@ When writing scripts, tailor these to the specific project:
 ├── stop.sh                 ← kill session
 ├── queen.sh                ← pure rule-based task dispatch
 ├── bee.sh                  ← bash infra + LLM code
-├── llm.sh                  ← Claude/Codex provider adapter
+├── llm.sh                  ← Claude/Codex/Hermes provider adapter
 ├── format_claude_stream.py ← Claude stream-json formatter
 ├── format_codex_stream.py  ← Codex JSONL formatter
+├── format_hermes_stream.py ← Hermes JSONL formatter
 └── monitor-cron.sh         ← optional cron → Codex resume bridge
 ```
 
