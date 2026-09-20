@@ -2,7 +2,7 @@
 name: agent/agentic-hive
 description: Start the autonomous multi-agent dev loop — a queen + bees in tmux solving tickets from LatticeCast PM
 argument-hint: plan | running | status
-version: 0.40.4
+version: 0.40.3
 ---
 
 # agentic-hive — Autonomous Dev Loop
@@ -28,11 +28,6 @@ bee time, **the ticket is too big — split it before opening**.
 
 Practical sizing rules when filing tickets:
 
-- **Story = the smallest releasable vertical slice.** It is not a feature
-  area, technical phase, or a promise to build an entire product feature. A
-  larger feature may be split into several stories, each with its own
-  user-visible outcome and end-to-end acceptance. Prefer the smallest story
-  that can be demonstrated and safely merged to `main`.
 - **One testable behavior, not one layer or file.** A task may touch frontend,
   backend, storage, and tests when that is required to deliver one coherent
   behavior end-to-end. Split only at a real, independently testable behavior

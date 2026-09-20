@@ -145,7 +145,7 @@ Every plan **MUST** follow this exact three-level hierarchy. No exceptions.
 
 ```
 Epic (1 per plan)
-└── Story 1 (smallest releasable vertical slice)
+└── Story 1 (feature area / phase)
 │   ├── Issue 1.1 (concrete implementation task)
 │   ├── Issue 1.2
 │   └── Issue 1.N
@@ -155,22 +155,18 @@ Epic (1 per plan)
 ```
 
 **Epic** — the single top-level goal of this plan. Set `type=epic`.  
-**Story** — the smallest independently releasable **vertical slice**, not a
-feature area, phase, or an entire product feature. It owns the frontend
-interaction, backend endpoint and data contract, persistence, response,
-writable-store cache update, derived UI state, and verification needed to make
-its one user-visible outcome work end-to-end. A larger feature may use several
-stories; each story must remain demonstrable and mergeable on its own. **Never
-create separate frontend and backend stories for one behavior.** Set
-`type=story`, `Parent=<epic_row_id>`.
+**Story** — one complete user-facing feature / vertical slice. It owns the
+frontend interaction, backend endpoint and data contract, persistence, response,
+writable-store cache update, derived UI state, and feature verification needed to
+make that capability work end-to-end. **Never create separate frontend and
+backend stories for one feature.** Set `type=story`, `Parent=<epic_row_id>`.
 **Issue/Task** — a single implementation unit. Set `type=task` or `type=bug`, `Parent=<story_row_id>`.
 
 Rules:
 - **Exactly 1 epic** per plan — never 0, never 2+
 - **Every story** must have `Parent` pointing to the epic
 - **Every issue** must have `Parent` pointing to a story (never directly to the epic)
-- Stories are **never** directly implementable — they group the smallest
-  releasable vertical slice's serial issues
+- Stories are **never** directly implementable — they are groupings only
 - Issues are the only tickets assigned to workers
 - A task/bug without a verified story parent is invalid and must not be written
   to PM or dispatched to a bee.
@@ -203,17 +199,12 @@ dependency.
   every layer required to make that behavior correct end-to-end; split only at
   a real, testable behavioral boundary.
 - Do not split stories or issues by technical layer (`frontend`, `backend`,
-  `database`, `API`). A story is a small complete vertical slice; its child
-  issues are even smaller serial, independently testable behavior slices inside
-  that outcome. When an outcome exceeds the 15-minute / <300-line limit, split
-  it into smaller **stories** at a user-visible, independently mergeable
-  boundary — never into FE-only and BE-only work.
+  `database`, `API`). A story is a complete feature; its child issues are
+  serial, independently testable behavior slices inside that feature.
 - Concurrent issues should **not conflict** — do not send overlapping files or
   mutually dependent behavior to separate bees. Put serial, dependent work in
   the same story worktree.
-- Order stories by dependency when useful, but do not use broad phase labels
-  such as "scaffold", "core", or "features" as stories. Name the concrete
-  vertical outcome instead.
+- Group stories into phases — Story 1 (scaffold), Story 2 (core), Story 3 (features), etc.
 
 ### Bad Tickets (too big or wrong level)
 - "Build the entire authentication system" — too many files, too many decisions
