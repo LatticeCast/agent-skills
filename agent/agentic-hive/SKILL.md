@@ -2,7 +2,7 @@
 name: agent/agentic-hive
 description: Start the autonomous multi-agent dev loop — a queen + bees in tmux solving tickets from LatticeCast PM
 argument-hint: plan | running | status
-version: 0.40.2
+version: 0.40.3
 ---
 
 # agentic-hive — Autonomous Dev Loop
@@ -308,8 +308,11 @@ ticket workflow unattended. Select it with:
 
 ```bash
 export LLM_PROVIDER=hermes
-# export HERMES_MODEL=anthropic/claude-sonnet-4.6  # optional
-# export HERMES_PROVIDER=anthropic                 # optional
+# Hermes/DeepSeek is the standard unattended hive configuration:
+# export HERMES_MODEL=deepseek-flash
+# export HERMES_PROVIDER=deepseek
+# export HERMES_BASE_URL=https://api.deepseek.com/v1
+# Inject DEEPSEEK_API_KEY from the runner secret store; never commit it.
 ```
 
 ### Watchdog: kill the provider if log goes silent

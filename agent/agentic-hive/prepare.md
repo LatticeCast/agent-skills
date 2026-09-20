@@ -69,8 +69,10 @@ HIVE_VERIFY_CMD=<project check, e.g. docker compose exec -T e2e pytest . -q>
 MONITOR_CODEX_SESSION_ID=
 # CLAUDE_MODEL=sonnet
 # CODEX_MODEL=gpt-5.6-codex
-# HERMES_MODEL=anthropic/claude-sonnet-4.6
-# HERMES_PROVIDER=anthropic
+# HERMES_MODEL=deepseek-flash
+# HERMES_PROVIDER=deepseek
+# HERMES_BASE_URL=https://api.deepseek.com/v1
+# DEEPSEEK_API_KEY is injected by the runner/secret store; never write it here.
 ```
 
 That's it. The helpers (`pm_*`, `lc_*`) are sourced from the skill,

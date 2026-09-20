@@ -24,6 +24,9 @@ LLM_PROJECT_DIR="${LLM_PROJECT_DIR:-${PROJECT_DIR:-$PWD}}"
 CLAUDE_BIN="${CLAUDE_BIN:-claude}"
 CODEX_BIN="${CODEX_BIN:-codex}"
 HERMES_BIN="${HERMES_BIN:-hermes}"
+HERMES_MODEL="${HERMES_MODEL:-deepseek-flash}"
+HERMES_PROVIDER="${HERMES_PROVIDER:-deepseek}"
+HERMES_BASE_URL="${HERMES_BASE_URL:-https://api.deepseek.com/v1}"
 
 _llm_print_command() {
   local provider="$1"
@@ -64,6 +67,18 @@ llm_validate() {
         echo "llm.sh: missing formatter: ${LLM_SCRIPT_DIR}/format_hermes_stream.py" >&2
         return 1
       }
+      # Match seo-system: configure the exact provider/model for every
+      # unattended worker before it consumes a ticket. A secret may be
+      # injected as DEEPSEEK_API_KEY or already stored by `hermes auth add`.
+      "$HERMES_BIN" config set model.default "$HERMES_MODEL" >/dev/null
+      "$HERMES_BIN" config set model.provider "$HERMES_PROVIDER" >/dev/null
+      "$HERMES_BIN" config set model.base_url "$HERMES_BASE_URL" >/dev/null
+      if [ "$HERMES_PROVIDER" = deepseek ] && [ -z "${DEEPSEEK_API_KEY:-}" ]; then
+        "$HERMES_BIN" auth status deepseek >/dev/null 2>&1 || {
+          echo 'llm.sh: DeepSeek requires DEEPSEEK_API_KEY injection or hermes auth add deepseek.' >&2
+          return 1
+        }
+      fi
       ;;
     *)
       echo "llm.sh: unknown LLM_PROVIDER='${LLM_PROVIDER}' (known: claude, codex, hermes)" >&2
@@ -147,8 +162,7 @@ _llm_run_hermes() {
     --yolo
     --in "$LLM_PROJECT_DIR"
   )
-  [ -z "${HERMES_MODEL:-}" ] || command+=(--model "$HERMES_MODEL")
-  [ -z "${HERMES_PROVIDER:-}" ] || command+=(--provider "$HERMES_PROVIDER")
+  command+=(--model "$HERMES_MODEL" --provider "$HERMES_PROVIDER")
 
   if [ "${LLM_DRY_RUN:-0}" = "1" ]; then
     _llm_print_command hermes "${command[@]}"
