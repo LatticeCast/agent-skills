@@ -91,8 +91,9 @@ source "${SKILLS_DIR}/developing/project-management/pm_tool.sh"
 
 Read [monitor.md](monitor.md) before selecting a monitor. For the Codex cron
 bridge, write `monitor-cron.sh` from the example and set
-`MONITOR_CODEX_SESSION_ID`. Do not automate terminal input with `send-keys` or
-`C-m`.
+`MONITOR_TMUX_TARGET=<session>:<window>`. It must submit to that real pane:
+when busy send `Escape`, then literal prompt + `C-m`; never use `Enter` or
+`Tab`.
 
 ## Customization points per project
 

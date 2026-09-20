@@ -7,12 +7,14 @@ to the supervising conversation. Stop it when the queen reports completion.
 
 ## Select a delivery method
 
-Choose the native capability of the supervising provider first. When the
-supervising conversation is an attached tmux Codex pane, submit a monitor
-prompt with `tmux send-keys -l "$PROMPT"` followed by
-`tmux send-keys C-m`. **Do not use `Enter`**: it is not a reliable tmux submit
-key for this flow. After submission, capture the pane and verify the prompt or
-its resulting work appears; a command exit code alone does not prove delivery.
+Choose the native capability of the supervising provider first. For an
+attached tmux Codex pane, submit to the real pane, never to a separate CLI
+session. If the pane is working or has deferred input, send `Escape` first:
+Codex labels this as interrupt-and-send-immediately. Then send the literal
+prompt with `tmux send-keys -l "$PROMPT"`, followed by `tmux send-keys C-m`.
+**Do not use `Enter` or `Tab`**: Enter is unreliable here and Tab only piles
+up queued text. Capture the pane after submission; a newly active turn or the
+prompt in the pane is delivery evidence.
 
 | Supervising provider | Preferred monitor | When to use it |
 |---|---|---|
@@ -48,7 +50,7 @@ actually integrated, update it to `merged` so it is not repeated.
 
 Use this only when Codex's host Monitor cannot remain active.
 
-1. Set `MONITOR_CODEX_SESSION_ID` in `.tmp/agentic-hive/.env`.
+1. Set `MONITOR_TMUX_TARGET=<session>:<window>` in `.tmp/agentic-hive/.env`.
 2. Copy `example-scripts/monitor-cron.sh` into `.tmp/agentic-hive/`.
 3. Install one cron entry:
 
@@ -57,9 +59,10 @@ Use this only when Codex's host Monitor cannot remain active.
 ```
 
 The script loads `.env`, locks overlapping ticks with `flock`, writes the
-trigger time, and runs `codex exec resume` with the status prompt. After its
-first tick, verify both `.tmp/out/hive-monitor-cron.log` and that this chat
-received the report. A zero process exit alone is not proof of delivery.
+trigger time, and delivers to `MONITOR_TMUX_TARGET` using `Escape` then `C-m`.
+After its first tick, verify both `.tmp/out/hive-monitor-cron.log` and that
+this chat received the report. A zero process exit alone is not proof of
+delivery.
 
 Remove the cron entry when the hive completes.
 
