@@ -7,9 +7,12 @@ to the supervising conversation. Stop it when the queen reports completion.
 
 ## Select a delivery method
 
-Choose the native capability of the supervising provider first. Do not use
-tmux input automation: `tmux send-keys`, `C-m`, and delayed Enter can alter a
-terminal buffer without proving a chat message was submitted.
+Choose the native capability of the supervising provider first. When the
+supervising conversation is an attached tmux Codex pane, submit a monitor
+prompt with `tmux send-keys -l "$PROMPT"` followed by
+`tmux send-keys C-m`. **Do not use `Enter`**: it is not a reliable tmux submit
+key for this flow. After submission, capture the pane and verify the prompt or
+its resulting work appears; a command exit code alone does not prove delivery.
 
 | Supervising provider | Preferred monitor | When to use it |
 |---|---|---|
