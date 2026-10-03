@@ -26,14 +26,13 @@ pm_login
 | Login | `POST /login/password` / `pm_login` |
 | Read schema | `GET /tables/{table_id}` / `lc_table_get` |
 | Create/read/update row | `/tables/{table_id}/rows` / `lc_row_*` |
-| Read/write selected Markdown blob | `/rows/{row_id}/blob/{column_id}/doc` / `lc_blob_doc_*` |
+| Read/write selected Markdown blob | `/rows/{row_id}/blob/{column_id}` / `lc_blob_doc_*` |
 | Upload/download/delete selected binary blob | `/rows/{row_id}/blob/{column_id}` / `lc_blob_*` |
 | PM ticket document | `pm_read_doc`, `pm_write_doc`, `pm_append_doc` |
 
-`/rows/{row_id}/doc` is deliberately retained only for the PM/default-doc
-compatibility flow. It resolves the table's first `blob` column with
-`options.kind=doc`; application code that has a column UUID must use the
-addressed blob-doc route.
+There are no `/rows/{row_id}/doc` or `/blob/{column_id}/doc` compatibility
+routes. `pm_*_doc` resolves the first PM `blob` column with `options.kind=doc`
+from the table schema, then uses the addressed blob route.
 
 ## PM conventions
 

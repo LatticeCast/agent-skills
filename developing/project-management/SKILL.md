@@ -3,7 +3,7 @@ name: developing/project-management
 description: LatticeCast PM integration — ticket status updates, project setup, pre-flight checks. Internal library used by developing/programming, agent/agentic-hive, and developing/onboarding.
 user-invocable: false
 allowed-tools: Bash, Read
-version: 0.12.1
+version: 0.12.2
 ---
 
 # LatticeCast Project Management
@@ -87,9 +87,9 @@ PM helpers resolve named template fields to column UUIDs. Use their `pm_*`
 operations rather than hand-written curl or hard-coded column IDs.
 
 Each ticket's detailed markdown is its default **doc blob cell**. `pm_read_doc`,
-`pm_write_doc`, and `pm_append_doc` deliberately use the default-doc
-compatibility route, so existing PM templates remain stable. New non-PM code
-must address a selected doc cell as `/rows/{row_id}/blob/{column_id}/doc`.
+`pm_write_doc`, and `pm_append_doc` resolve that column from the PM schema and
+use `/rows/{row_id}/blob/{column_id}`. New non-PM code must likewise address
+its selected blob column directly; there are no `/doc` compatibility routes.
 
 ## Ensure Running
 

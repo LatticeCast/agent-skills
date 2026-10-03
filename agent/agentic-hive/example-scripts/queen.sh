@@ -119,6 +119,13 @@ col() {
   python3 -c "import sys,json; t=json.load(sys.stdin); print(next((c['column_id'] for c in t['columns'] if c['name']=='$1'),''))" 2>/dev/null
 }
 
+# The current blob API requires an explicit column ID. PM ticket docs are the
+# template's first blob column whose options.kind is `doc`.
+doc_col() {
+  curl -fsS "${PM_URL}/api/v1/tables/${TABLE_ID}" -H "$AUTH" 2>/dev/null | \
+  python3 -c "import sys,json; t=json.load(sys.stdin); print(next((c['column_id'] for c in t['columns'] if c.get('type') == 'blob' and c.get('options', {}).get('kind') == 'doc'),''))" 2>/dev/null
+}
+
 # ─── Step 1: Query PM for todo tasks (pure bash+python, NO LLM) ──────────────
 get_todo() {
   local SID; SID=$(col Status)
@@ -153,10 +160,18 @@ spawn_worker() {
   [ -n "$PARENT" ] || { log "ERROR: task ${RN} has no parent story"; return 1; }
   local STORY_BRANCH="story/story-${PARENT}"
   local STORY_WORKTREE="${PROJECT_DIR}/.tmp/story_${PARENT}"
-  local TYPE_ID STORY_DOC BASE_SPEC BASE_BRANCH="main"
+  local TYPE_ID DOC_COLUMN_ID STORY_DOC BASE_SPEC BASE_BRANCH="main"
   local DEPENDS_ON=""
   TYPE_ID=$(col Type)
-  STORY_DOC=$(curl -s "${PM_URL}/api/v1/tables/${TABLE_ID}/rows/${PARENT}/doc" -H "$AUTH")
+  DOC_COLUMN_ID=$(doc_col)
+  [ -n "$DOC_COLUMN_ID" ] || {
+    log "Deferred ${RN}: PM table has no doc blob column"
+    return 1
+  }
+  STORY_DOC=$(curl -fsS "${PM_URL}/api/v1/tables/${TABLE_ID}/rows/${PARENT}/blob/${DOC_COLUMN_ID}" -H "$AUTH") || {
+    log "Deferred ${RN}: unable to read story ${PARENT} doc blob"
+    return 1
+  }
   BASE_SPEC=$(printf '%s\n' "$STORY_DOC" | awk '
     /^## Base Story[[:space:]]*$/ { found++; in_base=1; next }
     in_base && /^## / { in_base=0 }

@@ -2,7 +2,7 @@
 name: agent/agentic-hive
 description: Start the autonomous multi-agent dev loop — a queen + bees in tmux solving tickets from LatticeCast PM
 argument-hint: plan | running | status
-version: 0.40.3
+version: 0.40.4
 ---
 
 # agentic-hive — Autonomous Dev Loop
@@ -350,7 +350,7 @@ the conversation and prove the first scheduled report arrives.
 - `Skill(developing/project-management)` — provides `pm_tool.sh` and its
   bundled `lc_api.sh` HTTP wrapper.
 - `Skill(developing/programming)` — test/format/lint workflow.
-- LatticeCast PM — ticket tracking, doc storage (MinIO).
+- LatticeCast PM — ticket tracking, doc storage (RustFS-backed blob cells).
 
 ## Composition pattern
 

@@ -192,12 +192,11 @@ lc_row_patch() {
 lc_row_delete() { _lc_curl DELETE "/tables/$1/rows/$2"; }
 
 # ── Blob cells ────────────────────────────────────────────────────────────
-# Blob cell bodies are addressed separately from row_data metadata.  Use the
-# explicit routes for new integrations.  The default-doc helpers below remain
-# for PM templates, whose ticket doc is their first doc blob column.
+# Blob cell bodies are addressed separately from row_data metadata. Every blob
+# operation uses the selected-column route; there are no legacy /doc routes.
 
 # lc_blob_doc_read TID ROW_ID COLUMN_ID
-lc_blob_doc_read() { _lc_curl GET "/tables/$1/rows/$2/blob/$3/doc"; }
+lc_blob_doc_read() { lc_blob_download "$1" "$2" "$3"; }
 
 # lc_blob_doc_write TID ROW_ID COLUMN_ID [-f FILE]
 # Without -f: reads Markdown from stdin.
@@ -209,7 +208,10 @@ lc_blob_doc_write() {
         file=$(mktemp)
         cat > "$file"
     fi
-    _lc_curl PUT "/tables/${tid}/rows/${rid}/blob/${cid}/doc" "$file" "Content-Type: text/plain"
+    _lc_check_env
+    _lc_throttle
+    curl -sf -X PUT "${LC_API}/tables/${tid}/rows/${rid}/blob/${cid}" \
+        -H "$LC_AUTH_HEADER" -F "file=@${file};type=text/markdown"
     local rc=$?
     [ "${4:-}" != "-f" ] && rm -f "$file"
     return $rc
@@ -234,28 +236,6 @@ lc_blob_download() {
 }
 
 lc_blob_delete() { _lc_curl DELETE "/tables/$1/rows/$2/blob/$3"; }
-
-# ── Default PM document compatibility ────────────────────────────────────
-# These use /doc intentionally: the backend resolves the first doc blob column
-# in the PM template. Do not use them for a selected application blob column.
-
-lc_doc_read()  { _lc_curl GET "/tables/$1/rows/$2/doc"; }
-
-# lc_doc_write TID ROW_ID [-f FILE]
-# Without -f: reads body from stdin.
-lc_doc_write() {
-    local tid="$1" rid="$2" file=""
-    if [ "${3:-}" = "-f" ] && [ -n "${4:-}" ]; then
-        file="$4"
-    else
-        file=$(mktemp)
-        cat > "$file"
-    fi
-    _lc_curl PUT "/tables/${tid}/rows/${rid}/doc" "$file" "Content-Type: text/plain"
-    local rc=$?
-    [ "${3:-}" != "-f" ] && rm -f "$file"
-    return $rc
-}
 
 # ── Views ─────────────────────────────────────────────────────────────────
 # v40: views are addressed by view_id (BIGINT, auto-assigned per table).

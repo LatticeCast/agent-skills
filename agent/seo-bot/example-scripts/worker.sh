@@ -25,6 +25,7 @@ LC_PASS="${LC_PASS:-}"
 
 : "${ARTICLES_TABLE_ID:?ARTICLES_TABLE_ID must be set in .env}"
 : "${TITLE_COLUMN_ID:?TITLE_COLUMN_ID must be set in .env}"
+: "${ARTICLE_BLOB_COLUMN_ID:?ARTICLE_BLOB_COLUMN_ID must be set in .env}"
 
 if [ -z "${LC_AUTH_HEADER:-}" ] && [ -n "${LC_USER}" ]; then
     LC_TOKEN=""
@@ -93,8 +94,8 @@ if [ -z "$ROW_ID" ]; then
 fi
 log "row created, row_id=$ROW_ID"
 
-if ! lc_doc_write "$ARTICLES_TABLE_ID" "$ROW_ID" -f "$ARTICLE_FILE"; then
-    log "FAIL: lc_doc_write"
+if ! lc_blob_upload "$ARTICLES_TABLE_ID" "$ROW_ID" "$ARTICLE_BLOB_COLUMN_ID" "$ARTICLE_FILE"; then
+    log "FAIL: lc_blob_upload"
     exit 1
 fi
 log "uploaded OK"

@@ -1,7 +1,7 @@
 ---
 name: developing/fastapi
 description: FastAPI backend development — async-by-default, multi-worker safe. Use when writing FastAPI routes, DB access, or any I/O call in the backend.
-version: 0.3.0
+version: 0.3.1
 ---
 
 # FastAPI: Async + Multi-Worker
@@ -16,7 +16,7 @@ One blocking call freezes the event loop → all concurrent users stall.
 
 ### Use async-native libraries (preferred)
 - DB: `AsyncSession` + `asyncpg` (already done)
-- S3/MinIO: `aioboto3` — `async with s3_client() as s3: await s3.put_object(...)`
+- S3-compatible blob storage (RustFS): `aioboto3` — `async with s3_client() as s3: await s3.put_object(...)`
 - HTTP: `httpx.AsyncClient` — never `requests`
 - Sleep: `await asyncio.sleep(n)` — never `time.sleep(n)`
 
@@ -44,7 +44,7 @@ await asyncio.sleep(5)
 
 ## Rule 2: Multi-Worker Stateless
 
-We run `--workers 4`. Each worker is a **separate OS process** with its own memory. They share NOTHING except external services (PG, Valkey, MinIO).
+We run `--workers 4`. Each worker is a **separate OS process** with its own memory. They share NOTHING except external services (PG, Valkey, RustFS blob storage).
 
 ### What's safe (per-worker, independent)
 - Connection pools (`app_engine`, `login_engine`, `redis_client`) — each worker creates its own. PG/Valkey handle concurrent connections fine.

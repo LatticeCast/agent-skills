@@ -2,7 +2,7 @@
 name: agent/seo-bot
 description: Cross-product SEO article generator. Reads 3 CSVs (TA × promotion × product), loops the full Cartesian product, and spawns one fresh `claude -p` worker per article. Saves to LatticeCast articles table via lc_api.sh.
 argument-hint: run | status
-version: 0.3.1
+version: 0.3.2
 ---
 
 # seo-bot — Cross-Product Article Generator
@@ -38,6 +38,7 @@ Project root (e.g. seo-system/)
 | `LC_PASS` | Login password for `/login/password` |
 | `ARTICLES_TABLE_ID` | Table ID for the articles table |
 | `TITLE_COLUMN_ID` | Column ID for the title field in articles |
+| `ARTICLE_BLOB_COLUMN_ID` | Column ID for the article's `blob` cell |
 | `SKILLS_DIR` | Absolute path to the project's `.agent-skills` submodule |
 
 ## How it works
@@ -54,7 +55,7 @@ Project root (e.g. seo-system/)
    - Compose a prompt embedding the three contexts
    - `timeout 120 claude -p --dangerously-skip-permissions "<prompt>"`
    - Worker writes ONE markdown file to `~/.tmp/article-<title>.md`
-   - Bash creates row via `lc_row_create` then uploads doc via `lc_doc_write`
+   - Bash creates row via `lc_row_create` then uploads via `lc_blob_upload`
    - **No LLM in the upload path** — bash handles it deterministically
 4. Orchestrator logs in, derives `LC_AUTH_HEADER` at runtime, and emits
    `ALL_DONE` when count reached; otherwise exits non-zero
@@ -90,7 +91,7 @@ update orchestrator's `contains` skip-check.
 - **First line is `# <title>`.**
 - **No filler / no echoing the prompt.**
 - **Don't curl from inside the worker** — bash handles upload via
-  `lc_row_create` + `lc_doc_write`. Same rule as `agentic-hive`.
+  `lc_row_create` + `lc_blob_upload`. Same rule as `agentic-hive`.
 
 ## Rate limit
 

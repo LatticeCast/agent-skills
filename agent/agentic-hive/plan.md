@@ -45,7 +45,7 @@ Write design docs for user to review before creating tickets:
 - `.tmp/llm.design.*.md` — architecture, API design, data model decisions
 
 These are **drafts for review** — user approves before tickets are created.
-After tickets are created in LatticeCast, detailed notes go to each ticket's doc in MinIO.
+After tickets are created in LatticeCast, detailed notes go to each ticket's RustFS-backed doc blob cell.
 
 ## Step 4: Break Down into Tickets
 
@@ -69,7 +69,7 @@ Every behavior-changing issue doc MUST contain all of these headings:
 3. **Target Invariants** — testable statements of what must always be true
    after the change. State both positive and negative rules.
 4. **End-to-End Data Flow** — for server-backed behavior, trace
-   `UI event → controller → BE/PG/MinIO → response → store → derived GUI`.
+   `UI event → controller → BE/PG/RustFS blob storage → response → store → derived GUI`.
    Identify the source of truth at each persistent boundary.
 5. **Legacy Paths to Remove or Replace** — name every old route, renderer,
    default writer, compatibility helper, or duplicate flow that conflicts with
@@ -292,7 +292,7 @@ After user approves, use `Skill(developing/project-management)`:
    <verified cause and why alternatives were excluded>
 
    ## Target Invariants and Data Flow
-   <UI → controller → BE/PG/MinIO → response → store → derived GUI>
+   <UI → controller → BE/PG/RustFS blob storage → response → store → derived GUI>
 
    ## Legacy Paths to Remove or Replace
    <all conflicting paths; no implicit compatibility retention>
@@ -331,7 +331,7 @@ After user approves, use `Skill(developing/project-management)`:
    <positive and negative rules>
 
    ## End-to-End Data Flow
-   <UI → controller → BE/PG/MinIO → response → store → derived GUI>
+   <UI → controller → BE/PG/RustFS blob storage → response → store → derived GUI>
 
    ## Legacy Paths to Remove or Replace
    <every conflicting active path, or explicitly state none>

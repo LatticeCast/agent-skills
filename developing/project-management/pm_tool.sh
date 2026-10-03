@@ -43,6 +43,7 @@ PROJECT_DIR="${PROJECT_DIR:-$PWD}"
 PM_CACHE_DIR="${PROJECT_DIR}/.tmp/agentic-hive"
 TOKEN_CACHE="${PM_CACHE_DIR}/_pm_token"
 COL_CACHE="${PM_CACHE_DIR}/_col_cache.json"
+DOC_COL_CACHE="${PM_CACHE_DIR}/_doc_col"
 
 mkdir -p "${PM_CACHE_DIR}"
 
@@ -91,6 +92,26 @@ print(json.dumps(out))' \
 pm_col() {
     [ ! -s "${COL_CACHE}" ] && pm_cache_cols
     python3 -c "import json; print(json.load(open('${COL_CACHE}')).get('$1',''))"
+}
+
+# pm_doc_col → echoes the PM template's doc blob column_id. The current API
+# requires all blob access to name its column explicitly; `/doc` routes no
+# longer exist.
+pm_doc_col() {
+    if [ ! -s "${DOC_COL_CACHE}" ]; then
+        pm_login
+        lc_table_get "${TABLE_ID}" \
+            | python3 -c '
+import json, sys
+table = json.load(sys.stdin)
+column = next((c for c in table["columns"]
+               if c.get("type") == "blob" and c.get("options", {}).get("kind") == "doc"), None)
+if not column:
+    raise SystemExit("pm: table has no doc blob column")
+print(column["column_id"])' \
+            > "${DOC_COL_CACHE}"
+    fi
+    cat "${DOC_COL_CACHE}"
 }
 
 # pm_row_type ROW_ID → ticket Type value (epic, story, task, or bug).
@@ -142,7 +163,7 @@ pm_require_story_parent() {
 # pm_read_ticket_doc ROW_ID → reads the PM template's default doc blob for any row.
 pm_read_ticket_doc() {
     pm_login
-    lc_doc_read "${TABLE_ID}" "$1"
+    lc_blob_doc_read "${TABLE_ID}" "$1" "$(pm_doc_col)"
 }
 
 # pm_require_hive_context ISSUE_ROW_ID → verifies issue + parent story docs,
@@ -286,18 +307,18 @@ for r in todo:
 
 # ── Doc helpers ──────────────────────────────────────────────────────────
 
-pm_read_doc()   { pm_login; lc_doc_read "${TABLE_ID}" "$1"; }
+pm_read_doc()   { pm_login; lc_blob_doc_read "${TABLE_ID}" "$1" "$(pm_doc_col)"; }
 pm_write_doc()  {
     # pm_write_doc RN CONTENT
     pm_login
-    printf '%s' "$2" | lc_doc_write "${TABLE_ID}" "$1"
+    printf '%s' "$2" | lc_blob_doc_write "${TABLE_ID}" "$1" "$(pm_doc_col)"
 }
 pm_append_doc() {
     # pm_append_doc RN MESSAGE — appends a timestamped line.
     pm_login
     local rn="$1" msg="$2"
     local ts; ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-    local cur; cur=$(lc_doc_read "${TABLE_ID}" "${rn}" 2>/dev/null || echo "")
+    local cur; cur=$(lc_blob_doc_read "${TABLE_ID}" "${rn}" "$(pm_doc_col)" 2>/dev/null || echo "")
     printf '%s\n- %s %s' "${cur}" "${ts}" "${msg}" \
-        | lc_doc_write "${TABLE_ID}" "${rn}"
+        | lc_blob_doc_write "${TABLE_ID}" "${rn}" "$(pm_doc_col)"
 }
