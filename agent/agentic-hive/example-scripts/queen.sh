@@ -120,10 +120,10 @@ col() {
 }
 
 # The current blob API requires an explicit column ID. PM ticket docs are the
-# template's first blob column whose options.kind is `doc`.
+# template's first text blob column whose options.kind is `text`.
 doc_col() {
   curl -fsS "${PM_URL}/api/v1/tables/${TABLE_ID}" -H "$AUTH" 2>/dev/null | \
-  python3 -c "import sys,json; t=json.load(sys.stdin); print(next((c['column_id'] for c in t['columns'] if c.get('type') == 'blob' and c.get('options', {}).get('kind') == 'doc'),''))" 2>/dev/null
+  python3 -c "import sys,json; t=json.load(sys.stdin); print(next((c['column_id'] for c in t['columns'] if c.get('type') == 'blob' and c.get('options', {}).get('kind') in ('doc', 'text')),''))" 2>/dev/null
 }
 
 # ─── Step 1: Query PM for todo tasks (pure bash+python, NO LLM) ──────────────
