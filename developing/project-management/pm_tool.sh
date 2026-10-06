@@ -105,7 +105,7 @@ pm_doc_col() {
 import json, sys
 table = json.load(sys.stdin)
 column = next((c for c in table["columns"]
-               if c.get("type") == "blob" and c.get("options", {}).get("kind") == "doc"), None)
+               if c.get("type") == "blob" and c.get("options", {}).get("kind") in ("doc", "text")), None)
 if not column:
     raise SystemExit("pm: table has no doc blob column")
 print(column["column_id"])' \
