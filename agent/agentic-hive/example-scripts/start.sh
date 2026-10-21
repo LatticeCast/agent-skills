@@ -18,7 +18,11 @@ fi
 PROJECT_DIR="${1:?Usage: bash start.sh <project_dir> [max_cycles] [num_workers]}"
 PROJECT_DIR="$(cd "$PROJECT_DIR" && pwd)"
 MAX_CYCLES="${2:-50}"
-NUM_WORKERS="${3:-2}"
+NUM_WORKERS="${3:-1}"
+if [ "$NUM_WORKERS" != 1 ]; then
+  echo "Serial story integration requires one worker; ignoring num_workers=${NUM_WORKERS}"
+  NUM_WORKERS=1
+fi
 SESSION="$(basename "$PROJECT_DIR")"
 
 # Validate LatticeCast PM is running
@@ -37,8 +41,7 @@ fi
 # Kill existing session if any
 tmux kill-session -t "$SESSION" 2>/dev/null || true
 
-# Clean up stale files
-rmdir "${PROJECT_DIR}/_git.lock" 2>/dev/null || true
+# A lock may belong to an integration still running. Never remove it here.
 
 mkdir -p "${PROJECT_DIR}/.tmp/out"
 

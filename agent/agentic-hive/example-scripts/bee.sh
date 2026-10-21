@@ -46,22 +46,16 @@ log() {
   echo "$(date '+%H:%M:%S') [W${WORKER_ID}] $1" | tee -a "$LOG_FILE"
 }
 
-# Retry, and never abort the pipeline on a failed status write. PM is remote,
-# so one timeout now and then is expected; losing a finished ticket to it is
-# not. A ticket died exactly this way: verification passed and the commit was
-# made, then a single pm_set_status call failed a second later, the ERR trap
-# fired, and a completed ticket was flipped to `debugging`.
-#
-# Use this for every status write from `in_progress` onward. The gates above
-# it keep pm_set_status: before the ticket is claimed, failing loudly is right.
+# Retry transient PM failures, then fail closed. A failed final status write
+# must not let queen dispatch another issue against an uncertain PM state.
 set_status() {
   local rid="$1" st="$2" i
   for i in 1 2 3; do
     if pm_set_status "$rid" "$st" >/dev/null 2>&1; then return 0; fi
     sleep $((i * 3))
   done
-  log "warn: could not set status=${st} on ${rid} after 3 tries -- continuing"
-  return 0
+  log "ERROR: could not set status=${st} on ${rid} after 3 tries"
+  return 1
 }
 
 step() {
@@ -75,7 +69,7 @@ step() {
   # minutes (Agent/Explore sub-agent stall or API hangup that doesn't
   # surface in the pipe). Sample the log file every 30s; kill the
   # process if it hasn't grown for 120s. ERR trap then flips the row
-  # to `debugging` and the queen advances — trading 120s detection for
+  # to `debugging` and the queen stops dispatching — trading 120s detection for
   # 780s of otherwise-wasted budget.
   llm_run "${prompt}" "$LOG_FILE" &
   local pipe_pid=$!
@@ -146,12 +140,11 @@ TICKET_DOC=$(pm_read_ticket_doc "${ROW_ID}")
 STORY_DOC=$(pm_read_ticket_doc "${PARENT_RN}")
 log "Issue ${ROW_ID} and parent story ${PARENT_RN} docs verified"
 
-# ─── Phase 3: Clean only after verified scope + dependency ──────────────────
-log "Cleaning verified story worktree..."
+# ─── Phase 3: Preserve partial work; never discard a failed attempt ─────────
 if [ -n "$(git status --porcelain 2>/dev/null)" ]; then
-  git reset --hard HEAD 2>&1 | tee -a "$LOG_FILE"
-  git clean -fd 2>&1 | tee -a "$LOG_FILE"
-  log "Clean slate restored."
+  log "ERROR: dirty story worktree; resolve/commit partial work before retrying"
+  pm_set_status "${ROW_ID}" "debugging"
+  exit 1
 fi
 
 # ─── Phase 4: Claim, then build context ─────────────────────────────────────
@@ -309,7 +302,7 @@ else
   pm_append_doc "${ROW_ID}" "No programmatic verify configured (HIVE_VERIFY_CMD unset)"
 fi
 
-# Step 3: Commit + merge (bash, not LLM)
+# Step 3: Commit to the story branch only (bash, not LLM)
 set_status "${ROW_ID}" "review"
 
 while ! mkdir "$GIT_LOCK" 2>/dev/null; do sleep 2; done
@@ -355,7 +348,8 @@ fi
 
 rmdir "$GIT_LOCK" 2>/dev/null || true
 
-# Step 4: Mark merged
+# Step 4: Issue integrated into its story, NOT necessarily main.
+# Only queen/story_gate.py can land the verified story and mark the story merged.
 set_status "${ROW_ID}" "merged"
 pm_append_doc "${ROW_ID}" "W${WORKER_ID} finished"
 

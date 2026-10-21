@@ -18,7 +18,6 @@ SESSION="$(basename "$PROJECT_DIR")"
 echo "Stopping tmux session: ${SESSION}"
 tmux kill-session -t "$SESSION" 2>/dev/null && echo "Stopped." || echo "No session found."
 
-# Clean up orphan files
-rmdir "${PROJECT_DIR}/_git.lock" 2>/dev/null || true
-
-echo "Cleanup complete."
+# Integration/verification children may still be exiting. Leave locks and
+# failed worktrees intact; only their confirmed owner may release them.
+echo "Worktrees and locks preserved; inspect any interrupted integration before restarting."

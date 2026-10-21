@@ -6,9 +6,9 @@
 #     - cache column IDs to _col_cache.json (worker reads this)
 #     - recover orphans: if in_progress tickets exist but no tmux worker windows → reset to todo
 #   loop (max_cycles):
-#     1. query PM for todo tasks (type=task/bug, status=todo) using filter_json
-#     2. if none → ALL DONE, exit
-#     3. spawn N workers in tmux windows (pass TABLE_ID env, escape quotes in task)
+#     1. inspect all PM stories/issues plus Git integration state
+#     2. finish and verify/merge the current story into main before another
+#     3. spawn one worker on the selected story's next issue
 #     4. wait_finish: poll PM every 10s until ALL spawned rows
 #        leave (todo, in_progress, testing, review) → become (debugging, merged)
 #        - "todo" means worker hasn't picked it up yet — KEEP WAITING
@@ -34,6 +34,10 @@ PROJECT_DIR="${1:?Usage: queen.sh <project_dir> [max_cycles] [num_workers]}"
 PROJECT_DIR="$(cd "$PROJECT_DIR" && pwd)"
 MAX_CYCLES="${2:-50}"
 NUM_WORKERS="${3:-1}"
+if [ "$NUM_WORKERS" != 1 ]; then
+  echo "Serial story integration requires one worker; ignoring num_workers=${NUM_WORKERS}"
+  NUM_WORKERS=1
+fi
 SESSION="$(basename "$PROJECT_DIR")"
 LOG_FILE="${PROJECT_DIR}/.tmp/out/queen.log"
 CYCLE=0
@@ -43,19 +47,23 @@ PM_PASS="${PM_PASS:-}"
 PM_URL="${LC_API%/api/v1}"
 TABLE_ID="${TABLE_ID:?Set TABLE_ID}"
 if [ -z "${LC_AUTH_HEADER:-}" ]; then
-  PM_TOKEN=""
-  if [ -n "${PM_PASS}" ]; then
-    PM_TOKEN=$(curl -s -X POST "${PM_URL}/api/v1/login/password" \
+    PM_TOKEN=$(python3 -c 'import json,sys; print(json.dumps(dict(zip(("user_name", "password"), sys.argv[1:]))))' "$PM_USER" "$PM_PASS" | \
+      curl -fsS -X POST "${PM_URL}/api/v1/login/password" \
       -H "Content-Type: application/json" \
-      -d "{\"user_name\":\"${PM_USER}\",\"password\":\"${PM_PASS}\"}" \
-      | python3 -c "import sys,json; print(json.load(sys.stdin).get('access_token',''))" 2>/dev/null || echo "")
-  fi
-  [ -n "${PM_TOKEN}" ] || PM_TOKEN="${PM_USER}"
+      --data-binary @- \
+      | python3 -c "import sys,json; print(json.load(sys.stdin).get('access_token',''))") || exit 1
+  [ -n "${PM_TOKEN}" ] || { echo "PM login failed"; exit 1; }
   export LC_AUTH_HEADER="Authorization: Bearer ${PM_TOKEN}"
 fi
 AUTH="${LC_AUTH_HEADER}"
+export LC_AUTH_HEADER
 
-mkdir -p "${PROJECT_DIR}/.tmp/out"
+[ -n "${HIVE_STORY_VERIFY_CMD:-${HIVE_VERIFY_CMD:-}}" ] || {
+  echo "Set HIVE_STORY_VERIFY_CMD or HIVE_VERIFY_CMD before starting the queen"
+  exit 1
+}
+
+mkdir -p "${PROJECT_DIR}/.tmp/out" "${PROJECT_DIR}/.tmp/agentic-hive"
 
 log() { echo "$(date '+%H:%M:%S') [ORCH] $1" | tee -a "$LOG_FILE"; }
 
@@ -126,28 +134,10 @@ doc_col() {
   python3 -c "import sys,json; t=json.load(sys.stdin); print(next((c['column_id'] for c in t['columns'] if c.get('type') == 'blob' and c.get('options', {}).get('kind') in ('doc', 'text')),''))" 2>/dev/null
 }
 
-# ─── Step 1: Query PM for todo tasks (pure bash+python, NO LLM) ──────────────
+# ─── Step 1: Serial story scheduling (NO LLM) ──────────────────────────────
 get_todo() {
-  local SID; SID=$(col Status)
-  local FILTER; FILTER=$(python3 -c "import urllib.parse; print(urllib.parse.quote('{\"${SID}\":\"todo\"}'))")
-  curl -s "${PM_URL}/api/v1/tables/${TABLE_ID}/rows?limit=100&filter_json=${FILTER}" -H "$AUTH" 2>/dev/null | python3 -c "
-import sys, json
-rows = json.load(sys.stdin)
-tyid = '$(col Type)'; tid = '$(col Title)'; pid = '$(col Parent)'
-todo = [r for r in rows if r['row_data'].get(tyid) in ('task', 'bug')]
-todo.sort(key=lambda x: x['row_id'])
-seen_parents = set()
-todo = [r for r in todo if not (r['row_data'].get(pid) in seen_parents or seen_parents.add(r['row_data'].get(pid)))]
-if not todo:
-    print('ALL_DONE')
-else:
-    for i in range(${NUM_WORKERS}):
-        if i < len(todo):
-            r = todo[i]; d = r['row_data']
-            print(f'TASK{i+1}: {d.get(tid,\"?\")} (row_id={r[\"row_id\"]} parent={d.get(pid,\"\")})')
-        else:
-            print(f'TASK{i+1}: IDLE')
-" 2>/dev/null
+  python3 "${SCRIPT_DIR}/story_gate.py" plan "$PROJECT_DIR" \
+    --api "${PM_URL}/api/v1" --table "$TABLE_ID"
 }
 
 # ─── Step 3: Spawn worker in tmux window ──────────────────────────────────────
@@ -206,24 +196,23 @@ spawn_worker() {
     local DEP_ROW DEP_TYPE DEP_STATUS
     DEP_ROW=$(curl -s "${PM_URL}/api/v1/tables/${TABLE_ID}/rows/${DEPENDS_ON}" -H "$AUTH")
     DEP_TYPE=$(printf '%s' "$DEP_ROW" | python3 -c "import sys,json; print(json.load(sys.stdin)['row_data'].get('${TYPE_ID}',''))" 2>/dev/null || true)
-    if [ "$DEP_TYPE" = "story" ]; then
-      BASE_BRANCH="story/story-${DEPENDS_ON}"
-      if ! git -C "$PROJECT_DIR" show-ref --verify --quiet "refs/heads/${BASE_BRANCH}"; then
-        DEP_STATUS=$(printf '%s' "$DEP_ROW" | python3 -c "import sys,json; print(json.load(sys.stdin)['row_data'].get('$(col Status)',''))" 2>/dev/null || true)
-        if [ "$DEP_STATUS" = "merged" ]; then
-          BASE_BRANCH="main"
-        else
-          log "Deferred ${RN}: dependent story ${DEPENDS_ON} has no ready branch"
-          return 1
-        fi
-      fi
+    DEP_STATUS=$(printf '%s' "$DEP_ROW" | python3 -c "import sys,json; print(json.load(sys.stdin)['row_data'].get('$(col Status)',''))" 2>/dev/null || true)
+    if [ "$DEP_TYPE" != "story" ] || [ "$DEP_STATUS" != "merged" ]; then
+      log "Blocked ${RN}: dependent story ${DEPENDS_ON} is not merged"
+      return 1
+    fi
+    if git -C "$PROJECT_DIR" show-ref --verify --quiet "refs/heads/story/story-${DEPENDS_ON}" && \
+       ! git -C "$PROJECT_DIR" merge-base --is-ancestor "story/story-${DEPENDS_ON}" main; then
+      log "Blocked ${RN}: dependent story ${DEPENDS_ON} is not in main"
+      return 1
     fi
   fi
 
+  # Dependencies must already be in main; never fork from an unlanded story.
   git -C "$PROJECT_DIR" show-ref --verify --quiet "refs/heads/${STORY_BRANCH}" || \
-    git -C "$PROJECT_DIR" branch "$STORY_BRANCH" "$BASE_BRANCH"
+    git -C "$PROJECT_DIR" branch "$STORY_BRANCH" "$BASE_BRANCH" || return 1
   if ! git -C "$STORY_WORKTREE" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    git -C "$PROJECT_DIR" worktree add "$STORY_WORKTREE" "$STORY_BRANCH"
+    git -C "$PROJECT_DIR" worktree add "$STORY_WORKTREE" "$STORY_BRANCH" || return 1
   fi
   local TTYPE=$(echo "$TASK" | head -c 20 | tr ' ' '-' | tr -cd 'a-z0-9-')
   log "Spawn W${WID}: ${TASK}"
@@ -233,7 +222,7 @@ spawn_worker() {
 
 # ─── Step 4: Wait for ALL workers to FINISH ───────────────────────────────────
 # "Finish" = PM status is debugging or merged.
-# Review remains active because the worker still has to merge its commit.
+# Review remains active because the worker still has to commit its changes.
 # IMPORTANT: "todo" means worker hasn't started yet — must keep waiting!
 # 900s is Non-negotiable, if you want set larger than 900s, means your task too large, spilt
 wait_finish() {
@@ -247,17 +236,18 @@ wait_finish() {
     sleep 10
 
     local STILL_WORKING
-    STILL_WORKING=$(curl -s "${PM_URL}/api/v1/tables/${TABLE_ID}/rows?limit=500&sort=asc" -H "$AUTH" 2>/dev/null | python3 -c "
-import sys, json
-rows = json.load(sys.stdin)
+    STILL_WORKING=$(python3 -c "
+import json, os, urllib.request
 active = '${ROW_IDS}'.split()
 working = []
 for rn in active:
-    r = next((r for r in rows if str(r['row_id']) == rn), None)
-    if r:
-        s = r['row_data'].get('${SID}', '')
-        if s in ('todo', 'in_progress', 'testing', 'review'):
-            working.append(rn)
+    request = urllib.request.Request('${PM_URL}/api/v1/tables/${TABLE_ID}/rows/' + rn,
+        headers={'Authorization': os.environ['LC_AUTH_HEADER'].removeprefix('Authorization: ')})
+    with urllib.request.urlopen(request, timeout=15) as response:
+        r = json.load(response)
+    s = r['row_data'].get('${SID}', '')
+    if s not in ('debugging', 'merged'):
+        working.append(rn)
 print(' '.join(working) if working else 'NONE')
 " 2>/dev/null)
 
@@ -275,35 +265,20 @@ print(' '.join(working) if working else 'NONE')
     # outage must not consume a worker's 900-second execution budget.
     ELAPSED=$((ELAPSED + 10))
 
+    if [ "$STILL_WORKING" = "NONE" ]; then
+      log "All workers finished."
+      return 0
+    fi
+
     # Every 30 successful PM ticks, check whether the worker windows survived.
-    # PM was just read successfully, so it is safe to repair active rows.
+    # A disappeared worker is a failure, never permission to skip this story.
     if [ $((ELAPSED % 30)) -eq 0 ]; then
       local WORKER_WINDOWS
       WORKER_WINDOWS=$(tmux list-windows -t "${SESSION}" -F '#{window_name}' 2>/dev/null | grep "^w[0-9]" || true)
       if [ -z "$WORKER_WINDOWS" ]; then
-        log "No worker windows alive — resetting stuck tickets to todo"
-        for rn in $ROW_IDS; do
-          local cur_status code
-          cur_status=$(curl -s "${PM_URL}/api/v1/tables/${TABLE_ID}/rows/${rn}" -H "$AUTH" 2>/dev/null | \
-            python3 -c "import sys,json; print(json.load(sys.stdin)['row_data'].get('${SID}',''))" 2>/dev/null)
-          if [ "$cur_status" = "in_progress" ] || [ "$cur_status" = "testing" ] || [ "$cur_status" = "review" ]; then
-            code=$(curl -s -o /dev/null -w '%{http_code}' -X PATCH \
-              "${PM_URL}/api/v1/tables/${TABLE_ID}/rows/${rn}" \
-              -H "$AUTH" -H "Content-Type: application/json" \
-              -d "{\"row_data\": {\"${SID}\": \"todo\"}}")
-            case "$code" in
-              2*) log "Reset rn=${rn} ${cur_status} → todo (worker window gone)" ;;
-              *)  log "Reset FAILED for rn=${rn}: HTTP ${code}" ;;
-            esac
-          fi
-        done
-        return 0
+        log "No worker windows alive while issue remains unfinished; stopping"
+        return 1
       fi
-    fi
-
-    if [ "$STILL_WORKING" = "NONE" ]; then
-      log "All workers finished."
-      return 0
     fi
 
     [ $((ELAPSED % 60)) -eq 0 ] && log "Still working: [${STILL_WORKING}] (${ELAPSED}s)"
@@ -319,11 +294,20 @@ log "=== Orchestrator started (table: ${TABLE_ID}) ==="
 while [ "$CYCLE" -lt "$MAX_CYCLES" ]; do
   CYCLE=$((CYCLE + 1))
   log "=== Cycle ${CYCLE}/${MAX_CYCLES} ==="
-  rmdir "${PROJECT_DIR}/_git.lock" 2>/dev/null || true
-
-  # Step 1: Get tasks
-  TASKS=$(get_todo)
-  echo "$TASKS" | grep -q "ALL_DONE" && { log "ALL DONE!"; exit 0; }
+  # Errors, blocked issues and incomplete PM reads must never become ALL_DONE.
+  TASKS=$(get_todo) || { log "$TASKS"; exit 1; }
+  [ "$TASKS" = "ALL_DONE" ] && { log "ALL DONE!"; exit 0; }
+  if [[ "$TASKS" =~ ^MERGE:\ ([0-9]+)$ ]]; then
+    STORY_ID="${BASH_REMATCH[1]}"
+    log "Verify and merge story ${STORY_ID} before dispatching another story"
+    python3 "${SCRIPT_DIR}/story_gate.py" land "$PROJECT_DIR" \
+      --api "${PM_URL}/api/v1" --table "$TABLE_ID" --story "$STORY_ID" || {
+      log "Story integration failed; stopping with worktrees preserved"
+      exit 1
+    }
+    continue
+  fi
+  [[ "$TASKS" == TASK1:\ * ]] || { log "Invalid planner result: $TASKS"; exit 1; }
 
   # Step 2+3: Spawn workers
   ACTIVE="" RNS=""
@@ -333,16 +317,20 @@ while [ "$CYCLE" -lt "$MAX_CYCLES" ]; do
       RN=$(echo "$T" | grep -oP 'row_id=\K[0-9]+' || echo "")
       if spawn_worker "$i" "$T"; then
         ACTIVE="${ACTIVE} ${i}"; RNS="${RNS} ${RN}"
+      else
+        log "Dispatch failed; stopping rather than skipping this story"
+        exit 1
       fi
     else
       log "W${i}: IDLE"
     fi
   done
 
-  [ -z "$ACTIVE" ] && { sleep 15; continue; }
+  [ -n "$ACTIVE" ] || { log "No worker dispatched"; exit 1; }
 
   # Step 4: Wait for ALL workers to finish
-  wait_finish "$RNS"
+  WAIT_RC=0
+  wait_finish "$RNS" || WAIT_RC=$?
 
   # Step 5: Cleanup worker windows (match w{N}-* pattern)
   for i in $ACTIVE; do
@@ -351,6 +339,7 @@ while [ "$CYCLE" -lt "$MAX_CYCLES" ]; do
     done
   done
 
+  [ "$WAIT_RC" -eq 0 ] || { log "Worker failed/timed out; stopping"; exit 1; }
   sleep 3
 done
 log "Max cycles reached."

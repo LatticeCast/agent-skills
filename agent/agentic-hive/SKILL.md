@@ -2,12 +2,13 @@
 name: agent/agentic-hive
 description: Start the autonomous multi-agent dev loop — a queen + bees in tmux solving tickets from LatticeCast PM
 argument-hint: plan | running | status
-version: 0.40.4
+version: 0.41.0
 ---
 
 # agentic-hive — Autonomous Dev Loop
 
-Start a tmux-based queen that runs N bees in parallel to solve project tickets autonomously.
+Start a tmux-based queen that processes stories serially, with one bee at a time.
+Finish, verify, and merge each story into `main` before starting another story.
 
 ## Flow
 
@@ -62,12 +63,12 @@ Tickets follow a strict 3-level hierarchy: **Epic → Story → Issue**
 | Level | Branch base | Merges into |
 |-------|-------------|-------------|
 | Epic  | (no branch — grouping only) | — |
-| Story | declared `Base Story` (`main` or another story) | `main` (when all issues merged) |
+| Story | latest `main`, after declared `Base Story` is merged | `main` (after all issues and integrated verification pass) |
 | Issue | story branch | story branch |
 
 ```
 main
-└── story/{story-row-id}        ← base: main, or its declared Base Story branch
+└── story/story-<row-id>        ← base: latest main, after dependencies land
     ├── task-{row-id} commit    ← serial ticket commit on the story branch
     ├── bug-{row-id} commit
     └── final integrated verification commit (if needed)
@@ -81,10 +82,11 @@ story-level verification pass.
 
 **Story dependency base rule:** `Parent` always remains the epic row for PM
 hierarchy. Each story doc MUST declare `## Base Story` with exactly one value:
-`- main` or `- story-<row-id>`. A dependent story is created from the declared
-story branch. Do not start it until that branch exists; if it is already merged
-and its branch was cleaned up, create from `main` because it contains the same
-commits.
+`- main` or `- story-<row-id>`. This declares execution order, not permission
+to branch from unfinished code. The dependency must be PM `merged` and its
+retained branch must be an ancestor of `main`. Start the dependent story from
+latest `main`. Historical PM-merged stories whose branches were deleted are
+accepted for compatibility; new integrations retain branches as Git evidence.
 
 ## Bee Workflow
 
@@ -125,8 +127,9 @@ git worktree add "$STORY_WORKTREE" "$STORY_BRANCH"  # only if it does not yet ex
 cd "$STORY_WORKTREE"
 ```
 
-All tickets for this story use this same worktree serially. Tickets from other
-stories may use their own story worktrees in parallel.
+All tickets for this story use this same worktree serially. No other story
+starts until this story has actually landed in `main`. `num_workers` remains
+accepted for older wrappers but is normalized to 1.
 
 ### Step 3: Pick Ticket → Read Ticket → Read Story → Then Claim
 - Query LatticeCast PM for `todo` issues (type=task or type=bug).
@@ -210,7 +213,7 @@ Instead of writing application code, write + run one e2e test.
 
 ### Step 5: Test, Format, Lint, Commit
 Use `Skill(developing/programming)` workflow:
-- Update PM status → `testing` via `PUT /api/v1/tables/{table_id}/rows/{row_id}`
+- Update PM status → `testing` via `PATCH /api/v1/tables/{table_id}/rows/{row_id}`
 - Run tests (if fail → `debugging`, append error to doc)
 - Format + lint
 - Commit → update PM status to `review`
@@ -222,18 +225,26 @@ merge, or delete an issue branch/worktree. Update PM status → `merged`.
 
 ### Step 7: Check if All Story Issues Done → Merge Story into Main
 
-After marking the issue merged, check sibling issues in PM:
+**Queen owns this step, never the bee or LLM.** `story_gate.py` paginates all
+PM rows and checks Git ancestry. No `todo` issues does not mean `ALL_DONE`:
+completed issues on an unlanded story require integration first.
 
-```bash
-# Query all rows in table, filter by Parent = <story_row_id>
-# If ALL sibling issues have status=merged:
-git checkout main
-git merge "$STORY_BRANCH"
-git branch -d "$STORY_BRANCH"
-# Update story PM status → merged
-```
+Once all child issues are `merged`, queen marks the story `review`, creates
+a detached integration worktree under `.tmp/story-merge-<id>-*`, merges its
+story branch into the current `main` snapshot, and executes
+`HIVE_STORY_VERIFY_CMD` (falling back to `HIVE_VERIFY_CMD`). A nonempty
+verification command is mandatory. It must run the project's real checks
+against this combined worktree, not an unrelated running deployment.
 
-If siblings are **not all merged**, leave the story branch open.
+Only after verification succeeds, both source worktrees remain clean and
+unchanged, and PM still confirms readiness, queen fast-forwards `main` to
+the verified commit. It confirms ancestry, then marks the **story** `merged`.
+Only then may the next story start. Retain the story branch/worktree.
+
+Verification failures, merge conflicts, dirty worktrees, missing dependencies,
+blocked issues, PM failures and integration locks stop the runner. Never skip
+the blocked story or discard partial code. Failed integration worktrees are
+retained for diagnosis; no automatic hard reset, force cleanup or lock takeover.
 
 ### Step 8: Complete
 Bee leaves the PM status at `merged`. Queen polls PM to detect completion —
@@ -254,7 +265,7 @@ no trigger files are needed.
 - **CRITICAL: Continuously update the ticket doc.** Use `pm_append_doc` / `pm_write_doc` (`row_id`, not the removed `row_number`). They write the PM template's default doc blob. Append timestamped entries after EVERY action. Empty doc after work = FAILED.
 - **CRITICAL: FE changes MUST have `.browser/` snapshot.** Run a Playwright check from `e2e` (`docker compose exec -T e2e python3 -c "..."` connecting via `BROWSER_WS`) — server-side `page.screenshot(path="/output/...")` lands at `.browser/...` on host. If the snapshot looks wrong, fix before committing.
 - **API uses `row_id` (integer) in URL paths**, not the removed UUID row identifier. Example: `PUT /api/v1/tables/{tid}/rows/42`.
-- **NEVER POST new rows to update status.** Always use `PUT /api/v1/tables/{table_id}/rows/{row_id}` to update existing row_data. POST creates a NEW row and therefore a duplicate derived ticket key such as `task-42`. Bees must ONLY update, never create.
+- **NEVER POST new rows to update status.** Use `PATCH /api/v1/tables/{table_id}/rows/{row_id}` with only the Status column; never send blob metadata back in row_data. POST creates a NEW row. Bees must ONLY update, never create.
 - **If stuck:** diagnose why, append error + analysis to the ticket doc, try a different approach. If it still cannot finish, commit recoverable partial work, log what's done and what's left, set status to `debugging`, and stop. The next bee resumes by reading the doc.
 
 ## Provider-neutral LLM adapter (`llm.sh`)
@@ -326,7 +337,7 @@ pipe stops emitting events; without a guard the ticket burns the full
 The `example-scripts/bee.sh` `step()` function wraps `llm_run()` with a
 watchdog that samples the log file every 30s and calls `llm_stop()` if it
 hasn't grown for 120s. When it fires, `llm_run()` returns
-non-zero → ERR trap flips the row to `debugging` → queen advances.
+non-zero → ERR trap flips the row to `debugging` → queen stops dispatching.
 120s detection traded for 780s of otherwise-wasted budget.
 
 ## 3 Phases
@@ -383,7 +394,8 @@ source "${SKILLS_DIR}/developing/project-management/pm_tool.sh"
 
 | Script | Role |
 |--------|------|
-| queen.sh | Pure rule-based: query PM → spawn → poll → cleanup |
+| queen.sh | Pure rule-based: schedule one story → spawn → poll → verify/land → next story |
+| story_gate.py | Paginated PM scheduling + isolated verification + fast-forward integration gate |
 | bee.sh | Bash infra + LLM code: `source pm_tool.sh` for PM ops |
 | llm.sh | Provider abstraction: validates, runs, and stops Claude, Codex, or Hermes |
 | format_claude_stream.py | Formats Claude stream-json as live log lines |
