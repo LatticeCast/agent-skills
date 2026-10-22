@@ -31,9 +31,13 @@ pm_login
 | PM ticket document | `pm_read_doc`, `pm_write_doc`, `pm_append_doc` |
 
 There are no `/rows/{row_id}/doc` or `/blob/{column_id}/doc` compatibility
-routes. `pm_*_doc` resolves the first PM `blob` column with
-`options.kind=text` (and accepts legacy `doc` while present), then uses the
-addressed blob route.
+routes. `pm_*_doc`, queen, and story gate use `pm_doc_column.py` to resolve the
+current `Doc` column with `type=blob, options.kind=text`, or the sole text blob
+when renamed. Missing/ambiguous candidates fail; legacy `kind=doc` and stale
+`_doc_col` caches are not used. All reads/writes use the addressed blob route.
+
+`lc_blob_upload TID ROW_ID COLUMN_ID FILE [CONTENT_TYPE]` optionally sets the
+multipart file MIME type. `lc_blob_doc_write` delegates with `text/markdown`.
 
 ## PM conventions
 

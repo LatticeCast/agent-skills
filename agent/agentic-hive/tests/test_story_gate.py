@@ -299,6 +299,7 @@ class IntegrationTests(unittest.TestCase):
 
     def queen(self, api, verify):
         env = dict(os.environ, LC_API=api, TABLE_ID="pm",
+                   SKILLS_DIR=str(SCRIPT.parents[3]),
                    LC_AUTH_HEADER="Authorization: Bearer fixture-jwt",
                    HIVE_STORY_VERIFY_CMD=verify, HIVE_VERIFY_CMD="")
         return subprocess.run(["bash", str(SCRIPT.parent / "queen.sh"), str(self.root), "1", "7"],

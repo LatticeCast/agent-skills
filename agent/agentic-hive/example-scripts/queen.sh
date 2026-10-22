@@ -32,6 +32,7 @@ fi
 
 PROJECT_DIR="${1:?Usage: queen.sh <project_dir> [max_cycles] [num_workers]}"
 PROJECT_DIR="$(cd "$PROJECT_DIR" && pwd)"
+export SKILLS_DIR="${SKILLS_DIR:-${PROJECT_DIR}/.agent-skills}"
 MAX_CYCLES="${2:-50}"
 NUM_WORKERS="${3:-1}"
 if [ "$NUM_WORKERS" != 1 ]; then
@@ -128,10 +129,10 @@ col() {
 }
 
 # The current blob API requires an explicit column ID. PM ticket docs are the
-# template's first text blob column whose options.kind is `text`.
+# template's text blob column, resolved by the same helper as bees and gate.
 doc_col() {
   curl -fsS "${PM_URL}/api/v1/tables/${TABLE_ID}" -H "$AUTH" 2>/dev/null | \
-  python3 -c "import sys,json; t=json.load(sys.stdin); print(next((c['column_id'] for c in t['columns'] if c.get('type') == 'blob' and c.get('options', {}).get('kind') in ('doc', 'text')),''))" 2>/dev/null
+  python3 "${SKILLS_DIR}/developing/project-management/pm_doc_column.py"
 }
 
 # ─── Step 1: Serial story scheduling (NO LLM) ──────────────────────────────

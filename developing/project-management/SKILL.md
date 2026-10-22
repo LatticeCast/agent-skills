@@ -3,7 +3,7 @@ name: developing/project-management
 description: LatticeCast PM integration — ticket status updates, project setup, pre-flight checks. Internal library used by developing/programming, agent/agentic-hive, and developing/onboarding.
 user-invocable: false
 allowed-tools: Bash, Read
-version: 0.12.2
+version: 0.13.0
 ---
 
 # LatticeCast Project Management
@@ -90,6 +90,13 @@ Each ticket's detailed markdown is its default **doc blob cell**. `pm_read_doc`,
 `pm_write_doc`, and `pm_append_doc` resolve that column from the PM schema and
 use `/rows/{row_id}/blob/{column_id}`. New non-PM code must likewise address
 its selected blob column directly; there are no `/doc` compatibility routes.
+
+`pm_doc_column.py` is the shared resolver for PM helpers, queen, and story gate:
+select the `Doc` column with `type=blob, options.kind=text`, or the sole text
+blob if renamed. Multiple unnamed candidates fail rather than guess. Old
+`kind=doc` is not supported after V63. Resolve against current schema, not an
+old `_doc_col` cache. `lc_blob_upload` accepts an optional fifth MIME-type
+argument; Markdown writes delegate to it with `text/markdown`.
 
 ## Ensure Running
 

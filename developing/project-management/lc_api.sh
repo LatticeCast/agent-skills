@@ -205,23 +205,25 @@ lc_blob_doc_write() {
     if [ "${4:-}" = "-f" ] && [ -n "${5:-}" ]; then
         file="$5"
     else
-        file=$(mktemp)
+        local scratch_dir="${PROJECT_DIR:-$PWD}/.tmp"
+        mkdir -p "$scratch_dir" || return
+        file=$(mktemp "${scratch_dir}/blob-doc.XXXXXX") || return
         cat > "$file"
     fi
-    _lc_check_env
-    _lc_throttle
-    curl -sf -X PUT "${LC_API}/tables/${tid}/rows/${rid}/blob/${cid}" \
-        -H "$LC_AUTH_HEADER" -F "file=@${file};type=text/markdown"
-    local rc=$?
+    local rc=0
+    lc_blob_upload "$tid" "$rid" "$cid" "$file" "text/markdown" || rc=$?
     [ "${4:-}" != "-f" ] && rm -f "$file"
     return $rc
 }
 
-# lc_blob_upload TID ROW_ID COLUMN_ID FILE
+# lc_blob_upload TID ROW_ID COLUMN_ID FILE [CONTENT_TYPE]
 lc_blob_upload() {
     _lc_check_env
     _lc_throttle
-    curl -sf -X PUT "${LC_API}/tables/$1/rows/$2/blob/$3" -H "$LC_AUTH_HEADER" -F "file=@$4"
+    local type_suffix=""
+    [ -n "${5:-}" ] && type_suffix=";type=$5"
+    curl -sf -X PUT "${LC_API}/tables/$1/rows/$2/blob/$3" \
+        -H "$LC_AUTH_HEADER" -F "file=@$4${type_suffix}"
 }
 
 # lc_blob_download TID ROW_ID COLUMN_ID [OUTPUT_FILE]

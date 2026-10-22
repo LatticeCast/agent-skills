@@ -43,7 +43,6 @@ PROJECT_DIR="${PROJECT_DIR:-$PWD}"
 PM_CACHE_DIR="${PROJECT_DIR}/.tmp/agentic-hive"
 TOKEN_CACHE="${PM_CACHE_DIR}/_pm_token"
 COL_CACHE="${PM_CACHE_DIR}/_col_cache.json"
-DOC_COL_CACHE="${PM_CACHE_DIR}/_doc_col"
 
 mkdir -p "${PM_CACHE_DIR}"
 
@@ -98,20 +97,8 @@ pm_col() {
 # requires all blob access to name its column explicitly; `/doc` routes no
 # longer exist.
 pm_doc_col() {
-    if [ ! -s "${DOC_COL_CACHE}" ]; then
-        pm_login
-        lc_table_get "${TABLE_ID}" \
-            | python3 -c '
-import json, sys
-table = json.load(sys.stdin)
-column = next((c for c in table["columns"]
-               if c.get("type") == "blob" and c.get("options", {}).get("kind") in ("doc", "text")), None)
-if not column:
-    raise SystemExit("pm: table has no doc blob column")
-print(column["column_id"])' \
-            > "${DOC_COL_CACHE}"
-    fi
-    cat "${DOC_COL_CACHE}"
+    pm_login || return
+    lc_table_get "${TABLE_ID}" | python3 "${_PM_TOOL_DIR}/pm_doc_column.py"
 }
 
 # pm_row_type ROW_ID → ticket Type value (epic, story, task, or bug).
@@ -162,8 +149,9 @@ pm_require_story_parent() {
 
 # pm_read_ticket_doc ROW_ID → reads the PM template's default doc blob for any row.
 pm_read_ticket_doc() {
-    pm_login
-    lc_blob_doc_read "${TABLE_ID}" "$1" "$(pm_doc_col)"
+    local doc_column
+    doc_column=$(pm_doc_col) || return
+    lc_blob_doc_read "${TABLE_ID}" "$1" "$doc_column"
 }
 
 # pm_require_hive_context ISSUE_ROW_ID → verifies issue + parent story docs,
@@ -307,18 +295,19 @@ for r in todo:
 
 # ── Doc helpers ──────────────────────────────────────────────────────────
 
-pm_read_doc()   { pm_login; lc_blob_doc_read "${TABLE_ID}" "$1" "$(pm_doc_col)"; }
+pm_read_doc()   { pm_read_ticket_doc "$1"; }
 pm_write_doc()  {
     # pm_write_doc RN CONTENT
-    pm_login
-    printf '%s' "$2" | lc_blob_doc_write "${TABLE_ID}" "$1" "$(pm_doc_col)"
+    local doc_column
+    doc_column=$(pm_doc_col) || return
+    printf '%s' "$2" | lc_blob_doc_write "${TABLE_ID}" "$1" "$doc_column"
 }
 pm_append_doc() {
     # pm_append_doc RN MESSAGE — appends a timestamped line.
-    pm_login
-    local rn="$1" msg="$2"
+    local rn="$1" msg="$2" doc_column
+    doc_column=$(pm_doc_col) || return
     local ts; ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-    local cur; cur=$(lc_blob_doc_read "${TABLE_ID}" "${rn}" "$(pm_doc_col)" 2>/dev/null || echo "")
+    local cur; cur=$(lc_blob_doc_read "${TABLE_ID}" "${rn}" "$doc_column" 2>/dev/null || echo "")
     printf '%s\n- %s %s' "${cur}" "${ts}" "${msg}" \
-        | lc_blob_doc_write "${TABLE_ID}" "${rn}" "$(pm_doc_col)"
+        | lc_blob_doc_write "${TABLE_ID}" "${rn}" "$doc_column"
 }

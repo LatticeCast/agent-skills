@@ -106,8 +106,12 @@ class PM:
         self.auth = os.environ["LC_AUTH_HEADER"].removeprefix("Authorization: ")
         schema = self.request(self.table)
         self.columns = {c["name"]: c["column_id"] for c in schema["columns"]}
-        self.doc = next(c["column_id"] for c in schema["columns"]
-                        if c.get("type") == "blob" and c.get("options", {}).get("kind") in ("doc", "text"))
+        skills = Path(os.environ.get("SKILLS_DIR", Path(__file__).resolve().parents[3]))
+        resolver = skills / "developing/project-management/pm_doc_column.py"
+        self.doc = subprocess.run(
+            ["python3", str(resolver)], input=json.dumps(schema), text=True,
+            capture_output=True, check=True,
+        ).stdout.strip()
 
     def request(self, path, data=None, raw=False):
         request = urllib.request.Request(
