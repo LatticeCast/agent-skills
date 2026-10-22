@@ -149,6 +149,7 @@ pm_require_story_parent() {
 
 # pm_read_ticket_doc ROW_ID → reads the PM template's default doc blob for any row.
 pm_read_ticket_doc() {
+    pm_login || return
     local doc_column
     doc_column=$(pm_doc_col) || return
     lc_blob_doc_read "${TABLE_ID}" "$1" "$doc_column"
@@ -298,12 +299,14 @@ for r in todo:
 pm_read_doc()   { pm_read_ticket_doc "$1"; }
 pm_write_doc()  {
     # pm_write_doc RN CONTENT
+    pm_login || return
     local doc_column
     doc_column=$(pm_doc_col) || return
     printf '%s' "$2" | lc_blob_doc_write "${TABLE_ID}" "$1" "$doc_column"
 }
 pm_append_doc() {
     # pm_append_doc RN MESSAGE — appends a timestamped line.
+    pm_login || return
     local rn="$1" msg="$2" doc_column
     doc_column=$(pm_doc_col) || return
     local ts; ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)

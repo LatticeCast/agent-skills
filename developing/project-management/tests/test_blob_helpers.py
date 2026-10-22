@@ -96,6 +96,18 @@ curl() { printf '%s\\0' "$@"; return "$MOCK_RC"; }
                 self.assertNotEqual(result.returncode, 0)
                 self.assertEqual(result.stdout, "")
 
+    def test_document_operations_login_in_parent_shell(self):
+        for operation in ("pm_read_doc 42", "pm_read_ticket_doc 42", "pm_write_doc 42 body",
+                          "pm_append_doc 42 log"):
+            result = self.bash('''
+unset LC_AUTH_HEADER
+lc_login_password() { printf fixture-jwt; }
+lc_blob_doc_read() { _lc_check_env; printf existing; }
+lc_blob_doc_write() { _lc_check_env; cat >/dev/null; printf saved; }
+''' + operation)
+            with self.subTest(operation=operation):
+                self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_append_resolves_once_for_both_read_and_write(self):
         result = self.bash('''
 pm_doc_col() { printf x >> "$PROJECT_DIR/resolutions"; printf doc-id; }
