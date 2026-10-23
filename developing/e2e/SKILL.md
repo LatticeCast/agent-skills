@@ -2,7 +2,7 @@
 name: developing/e2e
 description: End-to-end tests — pytest + Playwright drives a real browser, every step verifies DB state, optional per-step snapshot.
 user-invocable: false
-version: 0.16.0
+version: 0.16.1
 ---
 
 # E2E Testing — pytest + Playwright + BE/DB Verification
@@ -63,7 +63,7 @@ Shared fixtures auto-discovered by pytest:
 - `admin_token` (session) — `login("lattice")`, return JWT
 - `authed_page` (function) — page with auth cookie + seed_login_info for admin
 - `workspace` (function) — create temp workspace, yield `(ws_id, ws_name)`, delete after
-- `pm_table` (function) — create PM template table in workspace, yield `(table_id, ws_id, columns, views)`
+- `pm_table` (function) — create a PM template table in a workspace, yield `(table_id, ws_id, columns, views)`; `table_id` is the numeric identity as text, ready for URL building
 
 Tests declare what they need by parameter name — no manual setup/teardown.
 

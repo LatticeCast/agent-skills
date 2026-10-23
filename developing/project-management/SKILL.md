@@ -3,7 +3,7 @@ name: developing/project-management
 description: LatticeCast PM integration — ticket status updates, project setup, pre-flight checks. Internal library used by developing/programming, agent/agentic-hive, and developing/onboarding.
 user-invocable: false
 allowed-tools: Bash, Read
-version: 0.13.0
+version: 0.13.1
 ---
 
 # LatticeCast Project Management
@@ -74,7 +74,7 @@ renamed from `row_number` in v0.40 — the field, JSON key, and URL
 segment are all `row_id` now.
 
 ```
-table identity: (workspace_id, table_id)
+table identity: table_id (BIGINT identity); table_name is its display name, unique per workspace
 row identity:   row_id (BIGINT, per table)
 row values:     row_data[column_uuid]
 ```

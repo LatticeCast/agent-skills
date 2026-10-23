@@ -69,11 +69,12 @@ class E2E:
             loc = loc.filter(has_text=text)
         loc.first.wait_for(state="visible", timeout=timeout)
 
-    def assert_table_in_sidebar(self, table_id):
-        self.assert_visible(".sidebar", text=table_id)
+    def assert_table_in_sidebar(self, table_name):
+        # The sidebar renders the display name; the route id is a number.
+        self.assert_visible(".sidebar", text=table_name)
 
-    def assert_table_in_main_grid(self, table_id):
-        self.assert_visible(".main-grid, .table-header", text=table_id)
+    def assert_table_in_main_grid(self, table_name):
+        self.assert_visible(".main-grid, .table-header", text=table_name)
 
     def assert_kanban_grouped_by(self, column_label):
         self.assert_visible(".kanban-column-header", text=column_label)

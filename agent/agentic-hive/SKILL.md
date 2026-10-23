@@ -2,7 +2,7 @@
 name: agent/agentic-hive
 description: Start the autonomous multi-agent dev loop — a queen + bees in tmux solving tickets from LatticeCast PM
 argument-hint: plan | running | status
-version: 0.41.1
+version: 0.41.2
 ---
 
 # agentic-hive — Autonomous Dev Loop
@@ -105,7 +105,7 @@ Before creating a worktree, look up the issue's parent story in LatticeCast PM:
 ```bash
 # Get the issue row to find parent story row_id
 ISSUE_ROW_ID="<row_id>"
-TABLE_ID="<table_id>"
+TABLE_ID="<numeric table_id>"
 # From row_data, get the Parent column value (= story row_id)
 # Then fetch that story row to get its type-<row_id> key (e.g. story-5)
 # Story branch name: story/{story-key-lowercase}  e.g. story/story-5

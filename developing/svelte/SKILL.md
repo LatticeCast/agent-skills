@@ -1,7 +1,7 @@
 ---
 name: developing/svelte
 description: Svelte/SvelteKit development — enforce pure TS logic in src/lib/, .svelte files handle UI/UX only, FE stores are cache of BE SSOT, render via $derived. Use when writing Svelte components or SvelteKit routes.
-version: 0.12.0
+version: 0.12.1
 ---
 
 # Svelte Architecture: Logic/UI Separation
@@ -90,7 +90,7 @@ const tables = await res.json();
 
 // GOOD: .svelte calls controller, controller handles BE + cache
 import { createTable } from '$lib/backend/tables';
-await createTable({ table_id: name, workspace_id: wsId });
+await createTable({ table_name: name, workspace_id: wsId }); // the response carries the numeric table_id
 // store cache already updated by controller — UI reacts
 ```
 

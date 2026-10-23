@@ -13,7 +13,8 @@ pm_login
 ## Identities and mutations
 
 - Workspace identity is UUID `workspace_id`; table identity is
-  `(workspace_id, table_id)`; `row_id` is a per-table BIGINT.
+  `table_id` (BIGINT identity) with `table_name` as its unique-per-workspace
+  display name; `row_id` is a per-table BIGINT.
 - Schema is returned by `GET /tables/{table_id}`. Row values are
   `row_data[column_uuid]`; do not use column names as keys.
 - `PATCH /tables/{table_id}/rows/{row_id}` merges non-blob data. `PUT` replaces
@@ -52,8 +53,9 @@ multipart file MIME type. `lc_blob_doc_write` delegates with `text/markdown`.
 
 ## Template setup route
 
-`lc_table_create_from_template <table_id> <workspace_id> [kind]` calls
-`POST /tables/template/{kind}`; `kind` defaults to `pm`.
+`lc_table_create_from_template <table_name> <workspace_id> [kind]` calls
+`POST /tables/template/{kind}`; `kind` defaults to `pm`. The call returns the
+assigned numeric `table_id`, which every later table-scoped path must use.
 
 The caller must have write access to the target workspace. Template creation
 returns the full schema snapshot; apply it as authoritative state.

@@ -114,15 +114,16 @@ lc_table_list() {
 }
 lc_table_get()    { _lc_curl GET    "/tables/$1"; }
 lc_table_create() {
-    # $1=table_id $2=workspace_id
-    local body; body=$(_lc_json "$(printf '{"table_id":"%s","workspace_id":"%s"}' "$1" "$2")")
+    # $1=table_name $2=workspace_id  (the response carries the numeric table_id)
+    local body; body=$(_lc_json "$(printf '{"table_name":"%s","workspace_id":"%s"}' "$1" "$2")")
     _lc_curl POST "/tables" "$body" "Content-Type: application/json"
     local rc=$?; rm -f "$body"; return $rc
 }
 lc_table_create_from_template() {
-    # $1=table_id $2=workspace_id $3=template kind (default pm)
+    # $1=table_name $2=workspace_id $3=template kind (default pm)
+    # The response carries the numeric table_id every later call must use.
     local body kind="${3:-pm}"
-    body=$(_lc_json "$(printf '{\"table_id\":\"%s\",\"workspace_id\":\"%s\"}' "$1" "$2")")
+    body=$(_lc_json "$(printf '{\"table_name\":\"%s\",\"workspace_id\":\"%s\"}' "$1" "$2")")
     _lc_curl POST "/tables/template/${kind}" "$body" "Content-Type: application/json"
     local rc=$?; rm -f "$body"; return $rc
 }

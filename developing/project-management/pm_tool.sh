@@ -13,7 +13,7 @@
 #   LC_API           e.g. http://localhost:13491/api/v1
 #   PM_USER          e.g. claude         (used for password-mode login)
 #   WORKSPACE_ID     pm table's workspace UUID
-#   TABLE_ID         the PM table's table_id (default: 'pm')
+#   TABLE_ID         the PM table's numeric table_id (create it with table_name first)
 # Optional:
 #   PM_PASS          ignored when AUTH_REQUIRED=false on backend
 #   PROJECT_DIR      where to put caches (defaults to $PWD)
