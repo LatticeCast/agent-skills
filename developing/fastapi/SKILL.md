@@ -1,14 +1,14 @@
 ---
 name: developing/fastapi
 description: FastAPI backend development — async-by-default, multi-worker safe. Use when writing FastAPI routes, DB access, or any I/O call in the backend.
-version: 0.3.1
+version: 0.3.2
 ---
 
 # FastAPI: Async + Multi-Worker
 
 Two rules govern every line of backend code:
 1. **Async** — every I/O call must be awaitable
-2. **Stateless** — every worker is independent, shared state lives in Valkey
+2. **Stateless** — every worker is independent, shared state lives in PostgreSQL (`private.cache` for cache, advisory locks for coordination)
 
 ## Rule 1: Async by Default
 
@@ -44,10 +44,10 @@ await asyncio.sleep(5)
 
 ## Rule 2: Multi-Worker Stateless
 
-We run `--workers 4`. Each worker is a **separate OS process** with its own memory. They share NOTHING except external services (PG, Valkey, RustFS blob storage).
+We run `--workers 4`. Each worker is a **separate OS process** with its own memory. They share NOTHING except external services (PostgreSQL and RustFS blob storage).
 
 ### What's safe (per-worker, independent)
-- Connection pools (`app_engine`, `login_engine`, `redis_client`) — each worker creates its own. PG/Valkey handle concurrent connections fine.
+- Connection pools (`app_engine`, `login_engine`) — each worker creates its own. PostgreSQL handles concurrent connections fine.
 - `aioboto3.Session()` — stateless factory, creates client per call.
 - `@lru_cache` on immutable config (`get_settings()`) — cached per worker, never changes.
 - Read-only constants (`BTREE_TYPES`, `GIN_TYPES`).
@@ -58,15 +58,16 @@ We run `--workers 4`. Each worker is a **separate OS process** with its own memo
 # BAD — module-level mutable cache (per-worker, not shared)
 _user_cache: dict[str, User] = {}
 
-# GOOD — use Valkey (shared across all workers)
-await redis.setex(f"user:{uid}", 300, json.dumps(data))
-cached = await redis.get(f"user:{uid}")
+# GOOD — PG-backed cache (private.cache, UNLOGGED; shared across all workers)
+from config.pg_cache import cache_get, cache_set
+await cache_set(f"user:{uid}", data, 300)   # JSON-serializable value, TTL seconds
+cached = await cache_get(f"user:{uid}")     # None on miss/expiry
 ```
 
 ### Rules
-- **No module-level dict/list caches.** If you need cache, use Valkey with TTL.
+- **No module-level dict/list caches.** If you need cache, use `config.pg_cache` (`cache_get`/`cache_set`/`cache_delete`) with a TTL.
 - **No in-process locks** (`threading.Lock`, `asyncio.Lock`) for cross-request coordination — they only protect within one worker.
-- **No file-based coordination** (lock files, temp state files). Use Valkey or PG advisory locks.
+- **No file-based coordination** (lock files, temp state files). Use PG advisory locks (`pg_advisory_xact_lock`).
 
 ## Lifespan: Init vs Side-Effects
 
@@ -74,8 +75,6 @@ cached = await redis.get(f"user:{uid}")
 # GOOD — connection pool init (each worker does its own, no conflict)
 async def lifespan(app):
     await init_db()       # creates per-worker connection pool
-    redis = await get_redis()
-    await redis.ping()
     yield
     await close_db()
 
@@ -91,7 +90,7 @@ async def lifespan(app):
 | Migrations | `migration` container (`--profile migration`) |
 | Seed data (dev user) | Migration SQL (`V31__seed.sql`) or admin API |
 | Bucket creation | `ensure_bucket_exists()` — idempotent, OK in lifespan |
-| JWKS pre-cache | `get_jwks()` → Valkey — idempotent, OK in lifespan |
+| Blob cleanup loop | `cleanup_loop()` — safe across workers (`FOR UPDATE SKIP LOCKED` + advisory locks) |
 
 ## Auto-Create User (disabled)
 

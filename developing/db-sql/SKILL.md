@@ -2,7 +2,7 @@
 name: developing/db-sql
 description: SQL writing — INSERT, UPSERT, indexing, JSONB. Use when writing or reviewing SQL statements, migrations, or schema changes.
 user-invocable: false
-version: 0.11.0
+version: 0.11.1
 ---
 
 # Safe SQL Rules
@@ -17,8 +17,9 @@ A newly created role has NO access to anything. You must explicitly grant every 
 
 ```
 public   — user-facing data (tables, rows, workspaces, workspace_members)
-auth     — authentication (users, user_info)
-private  — internal system data (migrations, config)
+auth     — authentication (users)
+gdpr     — PII (user_info: email/handle/config, user_password) so a purge can drop it
+private  — internal system data (migrations, cache, SSO sessions, blob queue)
 ```
 
 ### Roles
@@ -26,8 +27,11 @@ private  — internal system data (migrations, config)
 | Role | Purpose | Schemas |
 |------|---------|---------|
 | `dba` | Migrations (DDL) | ALL schemas — CREATE/ALTER/DROP |
-| `app` | General API | public: CRUD, auth: SELECT only |
-| `login_mgr` | Login/auth | auth: SELECT/INSERT/UPDATE only |
+| `app` | General API (`app_user`), runs under RLS | public: CRUD (RLS), auth: SELECT, gdpr: SELECT/UPDATE |
+| `mgr` | Login/admin (`mgr_user`), BYPASSRLS, DML only | public/auth/gdpr/private: DML, no DDL |
+
+LatticeCast's real roles are `dba`, `mgr`, `app` (see `migration/V1__init.sql`).
+`safe_example.sql` uses a generic `login_mgr` role only to illustrate least privilege.
 
 ### Creating roles (step by step)
 
@@ -57,12 +61,12 @@ CREATE USER app_user WITH PASSWORD 'secret' IN ROLE app;
 ### Key rules
 
 - **Only DBA can modify tables** — CREATE TABLE, ALTER TABLE, DROP TABLE are DDL operations. Only `dba` role has these privileges. Migration SQL runner MUST use DBA connection.
-- **`app` and `login_mgr` are DML-only** — SELECT/INSERT/UPDATE/DELETE. They cannot create, alter, or drop any database object.
+- **`app` and `mgr` are DML-only** — SELECT/INSERT/UPDATE/DELETE. They cannot create, alter, or drop any database object.
 - **`GRANT USAGE ON SCHEMA`** — required first, otherwise role can't even see the schema
 - **`GRANT ... ON ALL TABLES`** — covers existing tables only
 - **`ALTER DEFAULT PRIVILEGES`** — covers future tables (must specify `FOR ROLE <owner>`)
 - **`FOR ROLE dba`** is critical — default privileges apply to objects created BY that role
-- **Never GRANT on `public` schema to `login_mgr`** — login should only touch auth tables
+- **`mgr` bypasses RLS** — use it only for pre-authentication paths (login, SSO, admin); everything user-facing runs as `app` under RLS
 - **Test**: `psql -U app_user -c "DROP TABLE public.rows"` must fail
 - **Test**: `psql -U app_user -c "ALTER TABLE public.rows ADD COLUMN x TEXT"` must fail
 
