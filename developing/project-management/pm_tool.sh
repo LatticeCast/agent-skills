@@ -48,6 +48,20 @@ mkdir -p "${PM_CACHE_DIR}"
 
 # ── Auth / token cache ───────────────────────────────────────────────────
 
+# _pm_token_valid TOKEN → 0 if the server still accepts it. A story worktree
+# gets its own TOKEN_CACHE (PROJECT_DIR is the worktree, not the repo root),
+# and a worktree that sits idle longer than the token's TTL left a dead
+# token cached there forever -- pm_login used to trust any non-empty cache
+# file with no expiry check, so a bee always failed its very first PM call
+# on such a worktree, retry or not (story-229/task-239, 2026-11-05: cache
+# written 2026-11-03, refused by the server with "Token expired" every time).
+_pm_token_valid() {
+    local code
+    code=$(curl -s -o /dev/null -w '%{http_code}' "${LC_API}/workspaces" \
+        -H "Authorization: Bearer $1" 2>/dev/null)
+    [ "${code}" = "200" ]
+}
+
 # pm_login → ensures LC_AUTH_HEADER is set through password login.
 # A PM user name is never a bearer token. An empty PM_PASS is still sent to
 # /login/password for accounts without a configured password.
@@ -56,6 +70,9 @@ pm_login() {
     local token=""
     if [ -f "${TOKEN_CACHE}" ]; then
         token=$(cat "${TOKEN_CACHE}")
+    fi
+    if [ -n "${token}" ] && ! _pm_token_valid "${token}"; then
+        token=""
     fi
     if [ -z "${token}" ]; then
         token=$(lc_login_password "${PM_USER}" "${PM_PASS}") || {
